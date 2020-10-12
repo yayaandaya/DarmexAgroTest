@@ -1,0 +1,697 @@
+﻿@{
+    ViewBag.Title = "Darmex Agro";
+    ViewBag.dashboard = "Home";
+    ViewBag.dashboardSmall = "Transaksi";
+}
+
+<script type="text/javascript" src="~/data_transaksi.js"></script>
+<script type="text/javascript" src="~/data_transaksi_detail.js"></script>
+<script type="text/javascript" src="~/data_produk_detail.js"></script>
+
+<!-- jQuery validate-->
+<script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+<script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+
+<script type="text/javascript">
+    var masterproduk;
+    var datatransaksi;
+    var datatransaksiview;
+
+    $(document).ready(function () {
+
+        GetDataTransaksi();
+
+        GetDataMasterProduk();
+
+        $('.select2').select2();
+
+        var validator = $("#form_detail_transaksi").validate({
+            rules: {
+                valid_consumer: {
+                    required: true
+                }
+            }
+        });
+
+        $("#select-costumer").select2({
+            allowClear: true,
+            placeholder: "Select Costumer"
+        });
+
+        $('.select2').on('change', function () {
+            var data = $(".select2 option:selected").text();
+            $("#select-costumer-text").val(data);
+        })
+
+        $('#btn-add-transaksi').click(function () {
+            $("#TransaksiId").val('');
+            $("#TransaksiDate").val('');
+            $('#form_modal_transaksi').modal('show');
+            $('#select-costumer').val(null).trigger('change');
+            var transaksiId = uuidv4();
+            $("#TransaksiId").val(transaksiId);
+            var transaksiDate = getCurrentDate();
+            $("#TransaksiDate").val(transaksiDate);
+        });
+
+        $('#btn-save-transaksi').click(function () {
+
+            var gridDetailTransaksi = $('#gridDetailTransaksi').dxDataGrid('instance');
+            var dataItems = gridDetailTransaksi.getDataSource().items();
+            var dataCounts = dataItems.length;
+
+            var data = {
+                TransaksiId: $("#TransaksiId").val(),
+                TransaksiDate: $("#TransaksiDate").val(),
+                CostumerId: $("#select-costumer").val(),
+                CostumerName: $("#select-costumer-text").val(),
+                TotalPurchase: $("#purchase").val(),
+                TotalPayment: $("#payment").val(),
+                DataItems: dataItems
+
+            }
+
+            if ($('#form_detail_transaksi').valid() && dataCounts > 0) {
+                $("#btn-save-transaksi").attr("disabled", true);
+                $.ajax({
+                    type: 'post',
+                    dataType: 'json',
+                    url: '@Url.Action("SaveTransaksi", "Home")',
+                    data: JSON.stringify(data),
+                    contentType: 'application/json',
+                    success: function (result) {
+                        $("#btn-save-transaksi").attr("disabled", false);
+                        $('#form_modal_transaksi').modal('toggle');
+
+                        var gridDetailTransaksi = $('#gridDetailTransaksi').dxDataGrid('instance');
+                        gridDetailTransaksi.option('dataSource', []);
+
+                        GetDataTransaksi();
+
+                        resetForm();
+
+                        if (result.status) {
+                            $(document).Toasts('create', {
+                                title: 'Success',
+                                body: result.remarks
+                            })
+                        }
+                        else {
+                            alert(result.remarks);
+                        }
+                    },
+                });
+            }
+        });
+
+        $('#btn-add-transaksi-detail').click(function () {
+            $('#form_modal_produk').modal('show');
+        });
+
+        $("#gridDetailTransaksi").dxDataGrid({
+            dataSource: [],
+            columns: [
+                {
+                    dataField: 'ProdukDetailName',
+                    width: 150,
+                },
+                {
+                    dataField: 'NumberOfItems',
+                    dataType: "number",
+                    alignment: "center",
+                    width: 150,
+                },
+                {
+                    dataField: 'PricePerItem',
+                    dataType: "number",
+                    alignment: "right",
+                    width: 125,
+                },
+                {
+                    dataField: 'Discount',
+                    caption: "Discount %",
+                    dataType: "number",
+                    alignment: "right",
+                    width: 100,
+                },
+                {
+                    dataField: 'Price',
+                    dataType: "number",
+                    alignment: "right",
+                    width: 175,
+                }
+            ],
+            summary: {
+                totalItems: [{
+                    showInColumn: "Price",
+                    displayFormat: "Total Purchase: {0}",
+                    summaryType: "custom"
+                }
+                ],
+                calculateCustomSummary: function (options) {
+                    if (options.summaryProcess === "start") {
+                        options.totalValue = 0;
+                    }
+                    if (options.summaryProcess === "calculate") {
+                        options.totalValue = options.totalValue + options.value.Price;
+                    }
+                    if (options.summaryProcess === "finalize") {
+                        $("#purchase").val(options.totalValue);
+                        $("#payment").val(options.totalValue);
+                    }
+                }
+            },
+            paging: {
+                pageSize: 2
+            },
+            selection: {
+                mode: "single"
+            },
+            onSelectionChanged: function (e) {
+                var allSelectedRowsData = e.selectedRowsData;
+            }
+        });
+
+        $('[data-dismiss=modal]').on('click', function (e) {
+            var $t = $(this), target = $t[0].href || $t.data("target") || $t.parents('.modal') || [];
+            var modalId = $(target[0]).attr('id');
+            if (modalId === "form_modal_transaksi") {
+                //$(target).find("input").val('').end();
+                var gridDetailTransaksi = $('#gridDetailTransaksi').dxDataGrid('instance');
+                gridDetailTransaksi.option('dataSource', []);
+            }
+            $('#gridDetailProduk').dxDataGrid('instance').clearFilter();
+
+            resetForm();
+        });
+    });
+
+    function resetForm() {
+            $("#TransaksiDate").val('');
+            $('#select-costumer').val(null).trigger('change');
+            //$('#select-costumer').text(null).trigger('change');
+            $("#select-costumer-text").val('');
+            $("#purchase").val('');
+            $("#payment").val('');
+        }
+
+    function getCurrentDate() {
+        var date = new Date();
+
+        var month = date.getMonth() + 1;
+        var day = date.getDate();
+
+        var hour = date.getHours();
+        var minute = date.getMinutes();
+        var second = date.getSeconds();
+
+        var time = (hour < 10 ? '0' : '') + hour + ":" + (minute < 10 ? '0' : '') + minute + ":" + (second < 10 ? '0' : '') + second;
+
+        var currentDate = date.getFullYear() + '-' + (month < 10 ? '0' : '') + month + '-' + (day < 10 ? '0' : '') + day;
+
+        return currentDate + " " + time;
+    }
+
+    function GetDataMasterProduk() {
+        var data = [];
+        $.ajax({
+            type: 'GET',
+            contentType: "application/json; charset=utf-8",
+            url: '@Url.Action("GetDataProduk", "Home")',
+            dataType: 'JSON',
+            success: function (result) {
+                if (result != undefined) {
+                    for (var i = 0; i < result.length; i++) {
+                        data.push({
+                            ProdukDetailId: result[i].produkDetailId,
+                            ProdukId: result[i].produkId,
+                            ProdukName: result[i].produkName,
+                            ProdukDetailName: result[i].produkDetailName,
+                            PricePerItem: result[i].pricePerItem,
+                            Discount: result[i].discount,
+                        })
+                    }
+                }
+            },
+            error: function (xhr, status) {
+                console.log(xhr.responseText + xhr.Status);
+            }
+        });
+        masterproduk = data;
+        initializeGridMasterProduk();
+    }
+
+    function initializeGridMasterProduk() {
+        $("#gridDetailProduk").dxDataGrid({
+            dataSource: masterproduk,
+            columns: [
+                {
+                    dataField: 'ProdukDetailName',
+                    width: 300,
+
+                },
+                {
+                    dataField: 'PricePerItem',
+                    dataType: "number",
+                    alignment: "right",
+                    width: 200,
+                },
+                {
+                    dataField: 'Discount',
+                    caption: "Discount %",
+                    dataType: "number",
+                    alignment: "right",
+                    width: 200,
+                }
+            ],
+            paging: {
+                pageSize: 5
+            },
+            searchPanel: {
+                visible: true
+            },
+            selection: {
+                mode: "single"
+            },
+            onSelectionChanged: function (e) {
+                var allSelectedRowsData = e.selectedRowsData;
+                var transaksiDetailId = uuidv4();
+                var transaksiId = $("#TransaksiId").val();
+                var pricePerItem = allSelectedRowsData[0].PricePerItem;
+                var discount = allSelectedRowsData[0].Discount / 100;
+                var discountPrice = pricePerItem * discount;
+                var price = pricePerItem - discountPrice;
+
+                var data = {
+                    TransaksiDetailId: transaksiDetailId,
+                    TransaksiId: transaksiId,
+                    ProdukDetailId: allSelectedRowsData[0].ProdukId,
+                    ProdukDetailName: allSelectedRowsData[0].ProdukDetailName,
+                    NumberOfItems: 1,
+                    PricePerItem: allSelectedRowsData[0].PricePerItem,
+                    Discount: allSelectedRowsData[0].Discount,
+                    Price: price,
+                }
+
+                var gridDetailTransaksi = $('#gridDetailTransaksi').dxDataGrid('instance');
+                var dataSource = gridDetailTransaksi.getDataSource();
+                dataSource.store().insert(data).then(function () {
+                    dataSource.reload();
+                });
+
+                $('#form_modal_produk').modal('toggle');
+                $('#gridDetailProduk').dxDataGrid('instance').clearFilter();
+            }
+        });
+    }
+
+    function GetDataTransaksi() {
+        var data = [];
+        $.ajax({
+            type: 'GET',
+            contentType: "application/json; charset=utf-8",
+            url: '@Url.Action("GetDataTransaksi", "Home")',
+            dataType: 'JSON',
+            success: function (result) {
+                if (result != undefined) {
+                    for (var i = 0; i < result.length; i++) {
+                        data.push({
+                            TransaksiId: result[i].transaksiId,
+                            TransaksiDate: result[i].transaksiDate,
+                            CostumerId: result[i].costumerId,
+                            CostumerName: result[i].costumerName,
+                            TotalPurchase: result[i].totalPurchase,
+                            TotalPayment: result[i].totalPayment,
+                        })
+                    }
+                }
+            },
+            error: function (xhr, status) {
+                console.log(xhr.responseText + xhr.Status);
+            }
+        });
+        datatransaksi = data;
+        initializeGridTransaksi();
+    }
+
+    function initializeGridTransaksi() {
+        $("#gridTransaksi").dxDataGrid({
+            dataSource: datatransaksi,
+            columns: [
+                {
+                    dataField: 'TransaksiDate',
+                    dataType: "datetime",
+                    format: 'yyyy-MM-dd HH:mm:ss',
+                    width: 300,
+
+                },
+                {
+                    dataField: 'CostumerName',
+                    width: 300,
+                },
+                {
+                    dataField: 'TotalPurchase',
+                    dataType: "number",
+                    alignment: "right",
+                    width: 250,
+                },
+                {
+                    dataField: 'TotalPayment',
+                    dataType: "number",
+                    alignment: "right",
+                    width: 250,
+                }
+            ],
+            paging: {
+                pageSize: 5
+            },
+            searchPanel: {
+                visible: true
+            },
+            selection: {
+                mode: "single"
+            },
+            onSelectionChanged: function (e) {
+                var allSelectedRowsData = e.selectedRowsData;
+                $('#form_modal_transaksi_detail').modal('show');
+                $("#transaksi-date-view").val(allSelectedRowsData[0].TransaksiDate);
+                $("#costumer-view").val(allSelectedRowsData[0].CostumerName);
+                var param = {
+                    Id : allSelectedRowsData[0].TransaksiId
+                }
+                
+                GetDataTransaksiView(param);
+            }
+        });
+    }
+
+    function GetDataTransaksiView(param) {
+        var data = [];
+        $.ajax({
+            type: 'POST',
+            contentType: "application/json; charset=utf-8",
+            url: '@Url.Action("GetDataTransaksiView", "Home")',
+            data: JSON.stringify(param),
+            dataType: 'JSON',
+            success: function (result) {
+                if (result != undefined) {
+                    for (var i = 0; i < result.length; i++) {
+                        data.push({
+                            TransaksiDetailId: result[i].transaksiDetailId,
+                            TransaksiId: result[i].transaksiId,
+                            ProdukDetailId: result[i].produkDetailId,
+                            ProdukDetailName: result[i].produkDetailName,
+                            NumberOfItems: result[i].numberOfItems,
+                            PricePerItem: result[i].pricePerItem,
+                            Discount: result[i].discount,
+                            Price: result[i].totalPrice,
+                        })
+                    }
+                }
+            },
+            error: function (xhr, status) {
+                console.log(xhr.responseText + xhr.Status);
+            }
+        });
+        datatransaksiview = data;
+        initializeGridTransaksiView();
+    }
+
+    function initializeGridTransaksiView() {
+        $("#gridDetailTransaksiView").dxDataGrid({
+            dataSource: datatransaksiview,
+            columns: [
+                {
+                    dataField: 'ProdukDetailName',
+                    width: 150,
+                },
+                {
+                    dataField: 'NumberOfItems',
+                    dataType: "number",
+                    alignment: "center",
+                    width: 150,
+                },
+                {
+                    dataField: 'PricePerItem',
+                    dataType: "number",
+                    alignment: "right",
+                    width: 125,
+                },
+                {
+                    dataField: 'Discount',
+                    caption: "Discount %",
+                    dataType: "number",
+                    alignment: "right",
+                    width: 100,
+                },
+                {
+                    dataField: 'Price',
+                    dataType: "number",
+                    alignment: "right",
+                    width: 175,
+                }
+            ],
+            summary: {
+                totalItems: [{
+                    showInColumn: "Price",
+                    displayFormat: "Total Purchase: {0}",
+                    summaryType: "custom"
+                }
+                ],
+                calculateCustomSummary: function (options) {
+                    if (options.summaryProcess === "start") {
+                        options.totalValue = 0;
+                    }
+                    if (options.summaryProcess === "calculate") {
+                        options.totalValue = options.totalValue + options.value.Price;
+                    }
+                    if (options.summaryProcess === "finalize") {
+                        $("#purchase-view").val(options.totalValue);
+                        $("#payment-view").val(options.totalValue);
+                    }
+                }
+            },
+            paging: {
+                pageSize: 2
+            },
+            selection: {
+                mode: "single"
+            },
+            onSelectionChanged: function (e) {
+                var allSelectedRowsData = e.selectedRowsData;
+            }
+        });
+    }
+
+    function uuidv4() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+</script>
+
+<!-- Main content -->
+<section class="content">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <button type="button" class="btn btn-info float-right" id="btn-add-transaksi"><i class="fas fa-plus"></i> Add Transaksi</button>
+                    </div>
+                    <!-- /.card-header -->
+                    <div class="card-body">
+                        <div id="gridTransaksi"></div>
+                    </div>
+                    <!-- /.card-body -->
+                </div>
+                <!-- /.card -->
+            </div>
+            <!-- /.col -->
+        </div>
+        <!-- /.row -->
+    </div>
+    <!-- /.container-fluid -->
+</section>
+<!-- /.content -->
+
+<div id="form_modal_transaksi" class="modal fade" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    Transaksi Detail
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="form_detail_transaksi">
+                <div class="modal-body">
+                    <div class="card">
+                        <div class="card-header">
+                            <button type="button" class="btn btn-info float-right" id="btn-add-transaksi-detail"><i class="fas fa-plus"></i> Add item</button>
+                            <input type="text" class="form-control" value="" id="TransaksiId" hidden disabled>
+                        </div>
+                        <!-- /.card-header -->
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Transaksi Date</label>
+                                        <input type="text" class="form-control" name="valid_transaksi_date" placeholder="2020-10-10 17.55.00" value="@ViewBag.TransaksiDate" id="TransaksiDate" disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Costumer</label>
+                                        <select class="form-control select2" style="width:100%" id="select-costumer" name="valid_consumer">
+                                            @foreach (var costumer in ViewBag.Costumer)
+                                            {
+                                                <option value="@costumer.CostumerId">@costumer.CostumerName</option>
+                                            }
+                                        </select>
+                                        <input type="text" class="form-control" alue="" id="select-costumer-text" hidden disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                            </div>
+                            <!-- /.row -->
+                            <div id="gridDetailTransaksi"></div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <input type="text" class="form-control" placeholder="0" value="" id="purchase" hidden disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Total Payment</label>
+                                        <input type="text" class="form-control" placeholder="0" value="" id="payment" disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                            </div>
+                            <!-- /.row -->
+                        </div>
+                        <!-- /.card-body -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-clean btn-sm btn-bold btn-font-md"
+                            data-dismiss="modal">
+                        Close
+                    </button>
+                    <button type="submit" class="btn btn-success btn-sm btn-bold btn-font-md"
+                            id="btn-save-transaksi">
+                        <i class="fa fa-check"></i> Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="form_modal_produk" class="modal fade" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    Produk Detail
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="form_detail_produk">
+                <div class="modal-body">
+                    <div id="gridDetailProduk"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-clean btn-sm btn-bold btn-font-md"
+                            data-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="form_modal_transaksi_detail" class="modal fade" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    Transaksi Detail
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="form_detail_transaksi_view">
+                <div class="modal-body">
+                    <div class="card">
+                        <div class="card-header">
+                        </div>
+                        <!-- /.card-header -->
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Transaksi Date</label>
+                                        <input type="text" class="form-control" name="valid_transaksi_date" placeholder="2020-10-10 17.55.00" value="" id="transaksi-date-view" disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Costumer</label>
+                                        <input type="text" class="form-control" name="valid_costumer" placeholder="Yaya Andaya" value="" id="costumer-view" disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                            </div>
+                            <!-- /.row -->
+                            <div id="gridDetailTransaksiView"></div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <input type="text" class="form-control" placeholder="0" value="" id="purchase-view" hidden disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Total Payment</label>
+                                        <input type="text" class="form-control" placeholder="0" value="" id="payment-view" disabled>
+                                    </div>
+                                    <!-- /.form-group -->
+                                </div>
+                                <!-- /.col -->
+                            </div>
+                            <!-- /.row -->
+                        </div>
+                        <!-- /.card-body -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-clean btn-sm btn-bold btn-font-md"
+                            data-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
